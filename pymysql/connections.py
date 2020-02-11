@@ -1,7 +1,7 @@
 # Python implementation of the MySQL client-server protocol
 # http://dev.mysql.com/doc/internals/en/client-server-protocol.html
 # Error codes:
-# http://dev.mysql.com/doc/refman/5.5/en/error-messages-client.html
+# https://dev.mysql.com/doc/refman/5.5/en/error-handling.html
 from __future__ import print_function
 from ._compat import PY2, range_type, text_type, str_type, JYTHON, IRONPYTHON
 
@@ -254,6 +254,8 @@ class Connection(object):
 
         self.host = host or "localhost"
         self.port = port or 3306
+        if type(self.port) is not int:
+            raise ValueError("port should be of type int")
         self.user = user or DEFAULT_USER
         self.password = password or b""
         if isinstance(self.password, text_type):
@@ -265,10 +267,10 @@ class Connection(object):
             raise ValueError("connect_timeout should be >0 and <=31536000")
         self.connect_timeout = connect_timeout or None
         if read_timeout is not None and read_timeout <= 0:
-            raise ValueError("read_timeout should be >= 0")
+            raise ValueError("read_timeout should be > 0")
         self._read_timeout = read_timeout
         if write_timeout is not None and write_timeout <= 0:
-            raise ValueError("write_timeout should be >= 0")
+            raise ValueError("write_timeout should be > 0")
         self._write_timeout = write_timeout
         if charset:
             self.charset = charset
@@ -668,7 +670,10 @@ class Connection(object):
                 break
 
         packet = packet_type(bytes(buff), self.encoding)
-        packet.check_error()
+        if packet.is_error_packet():
+            if self._result is not None and self._result.unbuffered_active is True:
+                self._result.unbuffered_active = False
+            packet.raise_for_error()
         return packet
 
     def _read_bytes(self, num_bytes):

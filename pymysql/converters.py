@@ -5,8 +5,7 @@ from decimal import Decimal
 import re
 import time
 
-from .constants import FIELD_TYPE, FLAG
-from .charset import charset_by_id, charset_to_encoding
+from .constants import FIELD_TYPE
 
 
 def escape_item(val, charset, mapping=None):
@@ -54,7 +53,12 @@ def escape_int(value, mapping=None):
     return str(value)
 
 def escape_float(value, mapping=None):
-    return ('%.15g' % value)
+    s = repr(value)
+    if s in ('inf', 'nan'):
+        raise ProgrammingError("%s can not be used with MySQL" % s)
+    if 'e' not in s:
+        s += 'e0'
+    return s
 
 _escape_table = [unichr(x) for x in range(128)]
 _escape_table[0] = u'\\0'
@@ -153,6 +157,11 @@ def escape_date(obj, mapping=None):
 
 def escape_struct_time(obj, mapping=None):
     return escape_datetime(datetime.datetime(*obj[:6]))
+
+
+def Decimal2Literal(o, d):
+    return format(o, "f")
+
 
 def _convert_second_fraction(s):
     if not s:
@@ -332,7 +341,7 @@ encoders = {
     datetime.timedelta: escape_timedelta,
     datetime.time: escape_time,
     time.struct_time: escape_struct_time,
-    Decimal: escape_object,
+    Decimal: Decimal2Literal,
 }
 
 if not PY2 or JYTHON or IRONPYTHON:
